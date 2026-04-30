@@ -1,6 +1,6 @@
 import { SlashCommandPipe } from '@discord-nestjs/common';
 import { Command, Handler, IA, InteractionEvent } from '@discord-nestjs/core';
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import {
   CommandInteraction,
   GuildMember,
@@ -13,6 +13,7 @@ import { SearchItem } from 'src/clients/jellyfin/search/search.item';
 import { PlaybackService } from 'src/playback/playback.service';
 import { RandomCommandParams } from './random.params';
 import { defaultMemberPermissions } from '../../utils/environment';
+import { NowPlayingService } from '../nowplaying/now-playing.service';
 
 @Command({
   name: 'random',
@@ -21,10 +22,13 @@ import { defaultMemberPermissions } from '../../utils/environment';
 })
 @Injectable()
 export class EnqueueRandomItemsCommand {
+  private readonly logger = new Logger(EnqueueRandomItemsCommand.name);
+
   constructor(
     private readonly playbackService: PlaybackService,
     private readonly discordVoiceService: DiscordVoiceService,
     private readonly jellyfinSearchService: JellyfinSearchService,
+    private readonly nowPlayingService: NowPlayingService,
   ) {}
 
   @Handler()
@@ -32,36 +36,44 @@ export class EnqueueRandomItemsCommand {
     @InteractionEvent(SlashCommandPipe) dto: RandomCommandParams,
     @IA() interaction: CommandInteraction,
   ): Promise<void> {
-    await interaction.deferReply();
+    try {
+      await interaction.deferReply();
 
-    const guildMember = interaction.member as GuildMember;
+      const guildMember = interaction.member as GuildMember;
 
-    const tryResult =
-      this.discordVoiceService.tryJoinChannelAndEstablishVoiceConnection(
-        guildMember,
-      );
+      if (interaction.channelId) {
+        this.nowPlayingService.setSourceChannelId(interaction.channelId);
+      }
 
-    if (!tryResult.success) {
-      const replyOptions = tryResult.reply as InteractionReplyOptions;
+      const tryResult =
+        this.discordVoiceService.tryJoinChannelAndEstablishVoiceConnection(
+          guildMember,
+        );
+
+      if (!tryResult.success) {
+        const replyOptions = tryResult.reply as InteractionReplyOptions;
+        await interaction.editReply({
+          embeds: replyOptions.embeds,
+        });
+        return;
+      }
+
+      const items = await this.jellyfinSearchService.getRandomTracks(dto.count);
+      const tracks = await this.getTracks(items);
+
+      this.playbackService.getPlaylistOrDefault().enqueueTracks(tracks);
+
       await interaction.editReply({
-        embeds: replyOptions.embeds,
+        embeds: [
+          buildMessage({
+            title: `Added ${tracks.length} tracks to your playlist`,
+            description: 'Use ``/playlist`` to see them',
+          }),
+        ],
       });
-      return;
+    } catch (e) {
+      this.logger.error(`Failed to handle /random command: ${e}`);
     }
-
-    const items = await this.jellyfinSearchService.getRandomTracks(dto.count);
-    const tracks = await this.getTracks(items);
-
-    this.playbackService.getPlaylistOrDefault().enqueueTracks(tracks);
-
-    await interaction.editReply({
-      embeds: [
-        buildMessage({
-          title: `Added ${tracks.length} tracks to your playlist`,
-          description: 'Use ``/playlist`` to see them',
-        }),
-      ],
-    });
   }
 
   private async getTracks(hints: SearchItem[]) {

@@ -18,7 +18,12 @@ export class Track {
   readonly name: string;
 
   /**
-   * The duration of the track
+   * The artist(s) of the track
+   */
+  readonly artist: string;
+
+  /**
+   * The duration of the track in milliseconds
    */
   readonly duration: number;
 
@@ -36,9 +41,11 @@ export class Track {
     name: string,
     duration: number,
     remoteImages?: RemoteImageResult,
+    artist?: string,
   ) {
     this.id = id;
     this.name = name;
+    this.artist = artist ?? '';
     this.duration = duration;
     this.remoteImages = remoteImages;
     this.playing = false;
@@ -63,5 +70,12 @@ export class Track {
 
   updatePlaybackProgress(progress: number) {
     this.playbackProgress = progress;
+  }
+
+  getDisplayName(): string {
+    if (this.artist) {
+      return `${this.artist} - ${this.name}`;
+    }
+    return this.name;
   }
 }

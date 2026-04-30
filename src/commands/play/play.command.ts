@@ -26,6 +26,7 @@ import { DiscordVoiceService } from '../../clients/discord/discord.voice.service
 import { JellyfinSearchService } from '../../clients/jellyfin/search/jellyfin.search.service';
 import { SearchItem } from '../../clients/jellyfin/search/search.item';
 import { PlaybackService } from '../../playback/playback.service';
+import { NowPlayingService } from '../nowplaying/now-playing.service';
 import { formatMillisecondsAsHumanReadable } from '../../utils/timeUtils';
 
 import { defaultMemberPermissions } from '../../utils/environment';
@@ -44,6 +45,7 @@ export class PlayItemCommand {
     private readonly jellyfinSearchService: JellyfinSearchService,
     private readonly discordVoiceService: DiscordVoiceService,
     private readonly playbackService: PlaybackService,
+    private readonly nowPlayingService: NowPlayingService,
   ) {}
 
   @Handler()
@@ -51,84 +53,91 @@ export class PlayItemCommand {
     @InteractionEvent(SlashCommandPipe) dto: PlayCommandParams,
     @IA() interaction: CommandInteraction,
   ) {
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    try {
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-    const baseItems = PlayCommandParams.getBaseItemKinds(dto.type);
+      const baseItems = PlayCommandParams.getBaseItemKinds(dto.type);
 
-    let item: SearchItem | undefined;
-    if (dto.name?.startsWith('native-')) {
-      item = await this.jellyfinSearchService.getById(
-        dto.name.replace('native-', ''),
-        baseItems,
+      let item: SearchItem | undefined;
+      if (dto.name?.startsWith('native-')) {
+        item = await this.jellyfinSearchService.getById(
+          dto.name.replace('native-', ''),
+          baseItems,
+        );
+      } else {
+        item = (
+          await this.jellyfinSearchService.searchItem(dto.name, 1, baseItems)
+        ).find((searchHint) => searchHint);
+      }
+
+      if (!item) {
+        await interaction.followUp({
+          embeds: [
+            buildMessage({
+              title: 'No results found',
+              description:
+                '- Check for any misspellings\n- Grant me access to your desired libraries\n- Avoid special characters',
+            }),
+          ],
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+
+      const guildMember = interaction.member as GuildMember;
+      if (interaction.channelId) {
+        this.nowPlayingService.setSourceChannelId(interaction.channelId);
+      }
+
+      const tryResult =
+        this.discordVoiceService.tryJoinChannelAndEstablishVoiceConnection(
+          guildMember,
+        );
+
+      if (!tryResult.success) {
+        const replyOptions = tryResult.reply as InteractionReplyOptions;
+        await interaction.editReply({
+          embeds: replyOptions.embeds,
+        });
+        return;
+      }
+
+      const tracks = await item.toTracks(this.jellyfinSearchService);
+      this.logger.debug(`Extracted ${tracks.length} tracks from the search item`);
+      const reducedDuration = tracks.reduce(
+        (sum, item) => sum + item.duration,
+        0,
       );
-    } else {
-      item = (
-        await this.jellyfinSearchService.searchItem(dto.name, 1, baseItems)
-      ).find((searchHint) => searchHint);
-    }
+      this.logger.debug(
+        `Adding ${tracks.length} tracks with a duration of ${reducedDuration} ticks`,
+      );
+      this.playbackService.getPlaylistOrDefault().enqueueTracks(tracks, dto.next);
 
-    if (!item) {
+      const remoteImages = tracks.flatMap((track) => track.getRemoteImages());
+      const remoteImage: RemoteImageInfo | undefined =
+        remoteImages.length > 0 ? remoteImages[0] : undefined;
+
       await interaction.followUp({
         embeds: [
           buildMessage({
-            title: 'No results found',
-            description:
-              '- Check for any misspellings\n- Grant me access to your desired libraries\n- Avoid special characters',
+            title: `Added ${
+              tracks.length
+            } tracks to your playlist (${formatMillisecondsAsHumanReadable(
+              reducedDuration,
+            )})`,
+            mixin(embedBuilder) {
+              if (!remoteImage?.Url) {
+                return embedBuilder;
+              }
+              return embedBuilder.setThumbnail(remoteImage.Url);
+            },
           }),
         ],
         flags: MessageFlags.Ephemeral,
       });
-      return;
+    } catch (e) {
+      this.logger.error(`Failed to handle /play command: ${e}`);
     }
-
-    const guildMember = interaction.member as GuildMember;
-
-    const tryResult =
-      this.discordVoiceService.tryJoinChannelAndEstablishVoiceConnection(
-        guildMember,
-      );
-
-    if (!tryResult.success) {
-      const replyOptions = tryResult.reply as InteractionReplyOptions;
-      await interaction.editReply({
-        embeds: replyOptions.embeds,
-      });
-      return;
-    }
-
-    const tracks = await item.toTracks(this.jellyfinSearchService);
-    this.logger.debug(`Extracted ${tracks.length} tracks from the search item`);
-    const reducedDuration = tracks.reduce(
-      (sum, item) => sum + item.duration,
-      0,
-    );
-    this.logger.debug(
-      `Adding ${tracks.length} tracks with a duration of ${reducedDuration} ticks`,
-    );
-    this.playbackService.getPlaylistOrDefault().enqueueTracks(tracks, dto.next);
-
-    const remoteImages = tracks.flatMap((track) => track.getRemoteImages());
-    const remoteImage: RemoteImageInfo | undefined =
-      remoteImages.length > 0 ? remoteImages[0] : undefined;
-
-    await interaction.followUp({
-      embeds: [
-        buildMessage({
-          title: `Added ${
-            tracks.length
-          } tracks to your playlist (${formatMillisecondsAsHumanReadable(
-            reducedDuration,
-          )})`,
-          mixin(embedBuilder) {
-            if (!remoteImage?.Url) {
-              return embedBuilder;
-            }
-            return embedBuilder.setThumbnail(remoteImage.Url);
-          },
-        }),
-      ],
-      flags: MessageFlags.Ephemeral,
-    });
   }
 
   @On(Events.InteractionCreate)

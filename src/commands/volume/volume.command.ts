@@ -31,41 +31,45 @@ export class VolumeCommand {
     @InteractionEvent(SlashCommandPipe) dto: VolumeCommandParams,
     @IA() interaction: CommandInteraction,
   ): Promise<void> {
-    await interaction.deferReply();
+    try {
+      await interaction.deferReply();
 
-    if (!this.playbackService.getPlaylistOrDefault().hasActiveTrack()) {
+      if (!this.playbackService.getPlaylistOrDefault().hasActiveTrack()) {
+        await interaction.editReply({
+          embeds: [
+            buildMessage({
+              title: 'Unable to change your volume',
+              description:
+                'The bot is not playing any music or is not streaming to a channel',
+            }),
+          ],
+        });
+        return;
+      }
+
+      const volume = dto.volume / 100;
+
+      this.logger.debug(
+        `Calculated volume ${volume} from dto param ${dto.volume}`,
+      );
+
+      this.discordVoiceService.changeCurrentResourceVolume(volume);
+      this.playbackService.setVolume(volume);
+
+      // Discord takes some time to react. Confirmation message should appear after the actual change
+      await sleepAsync(1500);
+
       await interaction.editReply({
         embeds: [
           buildMessage({
-            title: 'Unable to change your volume',
+            title: `Successfully set volume to ${dto.volume.toFixed(0)}%`,
             description:
-              'The bot is not playing any music or is not streaming to a channel',
+              'Updating may take a few seconds to take effect.\nPlease note that listening at a high volume for a long time may damage your hearing',
           }),
         ],
       });
-      return;
+    } catch (e) {
+      this.logger.error(`Failed to handle /volume command: ${e}`);
     }
-
-    const volume = dto.volume / 100;
-
-    this.logger.debug(
-      `Calculated volume ${volume} from dto param ${dto.volume}`,
-    );
-
-    this.discordVoiceService.changeCurrentResourceVolume(volume);
-    this.playbackService.setVolume(volume);
-
-    // Discord takes some time to react. Confirmation message should appear after the actual change
-    await sleepAsync(1500);
-
-    await interaction.editReply({
-      embeds: [
-        buildMessage({
-          title: `Successfully set volume to ${dto.volume.toFixed(0)}%`,
-          description:
-            'Updating may take a few seconds to take effect.\nPlease note that listening at a high volume for a long time may damage your hearing',
-        }),
-      ],
-    });
   }
 }

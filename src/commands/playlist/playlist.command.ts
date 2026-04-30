@@ -234,7 +234,8 @@ export class PlaylistCommand {
   }
 
   private static getTrackName(track: Track, active: boolean) {
-    const trimmedTitle = trimStringToFixedLength(track.name, 30);
+    const displayName = track.getDisplayName();
+    const trimmedTitle = trimStringToFixedLength(displayName, 40);
     if (active) {
       return `**${trimmedTitle}**`;
     }

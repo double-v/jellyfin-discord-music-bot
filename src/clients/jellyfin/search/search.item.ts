@@ -1,5 +1,6 @@
 import {
   BaseItemDto,
+  RemoteImageResult,
   SearchHint as JellyfinSearchHint,
 } from '@jellyfin/sdk/lib/generated-client/models';
 import { z } from 'zod';
@@ -9,11 +10,17 @@ import { Track } from '../../../models/track';
 import { trimStringToFixedLength } from '../../../utils/stringUtils/stringUtils';
 
 export class SearchItem {
+  readonly artist: string;
+
   constructor(
     protected readonly id: string,
     protected readonly name: string,
     protected runtimeInMilliseconds: number,
-  ) {}
+    remoteImages?: RemoteImageResult,
+    artist?: string,
+  ) {
+    this.artist = artist ?? '';
+  }
 
   toString() {
     return `🎵 ${this.name}`;
@@ -21,7 +28,7 @@ export class SearchItem {
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async toTracks(searchService: JellyfinSearchService): Promise<Track[]> {
-    return [new Track(this.id, this.name, this.runtimeInMilliseconds, {})];
+    return [new Track(this.id, this.name, this.runtimeInMilliseconds, {}, this.artist)];
   }
 
   getId(): string {
@@ -46,18 +53,18 @@ export class SearchItem {
       );
     }
     let artist = '';
-    if (result.data.Artists !== null) {
+    if (result.data.Artists !== null && result.data.Artists.length > 0) {
       artist = result.data.Artists[0];
       if (result.data.Artists.length > 1) {
-        artist += ',... - ';
-      } else {
-        artist += ' - ';
+        artist += ',...';
       }
     }
     return new SearchItem(
       result.data.Id,
-      trimStringToFixedLength(artist + result.data.Name, 70),
+      trimStringToFixedLength(result.data.Name, 70),
       result.data.RunTimeTicks / 10000,
+      {},
+      artist,
     );
   }
 
@@ -67,10 +74,14 @@ export class SearchItem {
         'Unable to construct search hint from base item, required properties were undefined',
       );
     }
+    const artists = baseItem.Artists ?? [];
+    const artist = artists.length > 0 ? artists.join(', ') : (baseItem.AlbumArtist ?? '');
     return new SearchItem(
       baseItem.Id,
-      trimStringToFixedLength(baseItem.Name, 50),
+      trimStringToFixedLength(baseItem.Name, 70),
       baseItem.RunTimeTicks / 10000,
+      {},
+      artist,
     );
   }
 }

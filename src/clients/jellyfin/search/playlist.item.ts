@@ -24,7 +24,7 @@ export class PlaylistSearchItem extends SearchItem {
 
     return new PlaylistSearchItem(
       hint.Id,
-      trimStringToFixedLength(hint.Name, 50),
+      trimStringToFixedLength(hint.Name, 70),
       hint.RunTimeTicks / 10000,
     );
   }
@@ -38,7 +38,7 @@ export class PlaylistSearchItem extends SearchItem {
 
     return new PlaylistSearchItem(
       baseItem.Id,
-      trimStringToFixedLength(baseItem.Name, 50),
+      trimStringToFixedLength(baseItem.Name, 70),
       baseItem.RunTimeTicks / 10000,
     );
   }

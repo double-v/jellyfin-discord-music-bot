@@ -34,12 +34,14 @@ export class ArtistItem extends SearchItem {
   }
 
   private static constructArtist(data: BaseItemDto | JellyfinSearchHint) {
-    const artist = schema.parse(data);
+    const parsed = schema.parse(data);
 
     return new ArtistItem(
-      artist.Id,
-      trimStringToFixedLength(artist.Name, 50),
-      artist.RunTimeTicks / 10000,
+      parsed.Id,
+      trimStringToFixedLength(parsed.Name, 70),
+      parsed.RunTimeTicks / 10000,
+      {},
+      parsed.Name,
     );
   }
 }

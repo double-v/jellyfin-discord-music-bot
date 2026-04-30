@@ -21,6 +21,8 @@ import { PlayLikedCommand } from './playliked/playliked.command';
 import { VolumeCommand } from './volume/volume.command';
 import { ShuffleCommand } from './shuffle.command';
 import { BotStatusCommand } from './bot_status/bot_status.command';
+import { NowPlayingCommand } from './nowplaying/nowplaying.command';
+import { NowPlayingService } from './nowplaying/now-playing.service';
 
 @Module({
   imports: [
@@ -48,6 +50,8 @@ import { BotStatusCommand } from './bot_status/bot_status.command';
     VolumeCommand,
     ShuffleCommand,
     BotStatusCommand,
+    NowPlayingCommand,
+    NowPlayingService,
   ],
   exports: [],
 })

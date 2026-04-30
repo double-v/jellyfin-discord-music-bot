@@ -1,11 +1,12 @@
 import { Command, Handler, IA } from '@discord-nestjs/core';
 
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 
 import { CommandInteraction, GuildMember } from 'discord.js';
 
 import { buildMessage } from '../clients/discord/discord.message.builder';
 import { DiscordVoiceService } from '../clients/discord/discord.voice.service';
+import { NowPlayingService } from './nowplaying/now-playing.service';
 import { defaultMemberPermissions } from '../utils/environment';
 
 @Injectable()
@@ -15,32 +16,45 @@ import { defaultMemberPermissions } from '../utils/environment';
   defaultMemberPermissions,
 })
 export class SummonCommand {
-  constructor(private readonly discordVoiceService: DiscordVoiceService) {}
+  private readonly logger = new Logger(SummonCommand.name);
+
+  constructor(
+    private readonly discordVoiceService: DiscordVoiceService,
+    private readonly nowPlayingService: NowPlayingService,
+  ) {}
 
   @Handler()
   async handler(@IA() interaction: CommandInteraction): Promise<void> {
-    await interaction.deferReply();
+    try {
+      await interaction.deferReply();
 
-    const guildMember = interaction.member as GuildMember;
+      const guildMember = interaction.member as GuildMember;
 
-    const tryResult =
-      this.discordVoiceService.tryJoinChannelAndEstablishVoiceConnection(
-        guildMember,
-      );
+      if (interaction.channelId) {
+        this.nowPlayingService.setSourceChannelId(interaction.channelId);
+      }
 
-    if (!tryResult.success) {
-      await interaction.editReply(tryResult.reply);
-      return;
+      const tryResult =
+        this.discordVoiceService.tryJoinChannelAndEstablishVoiceConnection(
+          guildMember,
+        );
+
+      if (!tryResult.success) {
+        await interaction.editReply(tryResult.reply);
+        return;
+      }
+
+      await interaction.editReply({
+        embeds: [
+          buildMessage({
+            title: 'Joined your voice channel',
+            description:
+              "I'm ready to play media. Use ``Cast to device`` in Jellyfin or the ``/play`` command to get started.",
+          }),
+        ],
+      });
+    } catch (e) {
+      this.logger.error(`Failed to handle /summon command: ${e}`);
     }
-
-    await interaction.editReply({
-      embeds: [
-        buildMessage({
-          title: 'Joined your voice channel',
-          description:
-            "I'm ready to play media. Use ``Cast to device`` in Jellyfin or the ``/play`` command to get started.",
-        }),
-      ],
-    });
   }
 }

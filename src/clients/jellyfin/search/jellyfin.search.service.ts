@@ -325,6 +325,14 @@ export class JellyfinSearchService {
     }
   }
 
+  getApi() {
+    return this.jellyfinService.getApi();
+  }
+
+  getUserId() {
+    return this.jellyfinService.getUserId();
+  }
+
   private transformToSearchHintFromHint(jellyfinHint: JellyfinSearchHint) {
     switch (jellyfinHint.Type) {
       case BaseItemKind[BaseItemKind.Audio]:

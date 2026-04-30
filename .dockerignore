@@ -1,12 +1,11 @@
 test
 images
 docs
-package-lock.json
 Dockerfile
-pnpm-lock.yaml
 .vscode
 .github
 *.env
 *.gitignore
 .nest-cli.json
 .dockerignore
+node_modules

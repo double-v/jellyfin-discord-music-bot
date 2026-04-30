@@ -38,3 +38,6 @@ lerna-debug.log*
 
 # Secrets
 *.env
+
+# Claude Code
+.claude/

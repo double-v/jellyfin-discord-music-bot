@@ -30,9 +30,9 @@ export class JellyfinStreamBuilderService {
     url.searchParams.set('MaxStreamingBitrate', `${bitrate}`);
     url.searchParams.set('Container', 'ogg,opus');
     url.searchParams.set('AudioCodec', 'opus');
-    url.searchParams.set('TranscodingContainer', 'ts');
-    url.searchParams.set('TranscodingProtocol', 'hls');
-    url.searchParams.set('api_key', accessToken);
+    url.searchParams.set('TranscodingContainer', 'ogg');
+    url.searchParams.set('TranscodingProtocol', 'http');
+    url.searchParams.set('ApiKey', accessToken);
 
     this.logger.debug(`Built stream URL '${url}'`);
 

@@ -28,10 +28,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
       - uses: ./.github/actions/setup
-      - run: pnpm run build
-      - run: pnpm run format
-      - run: pnpm run build
-      - run: pnpm run test
+      - run: npm run build
+      - run: npm run format
+      - run: npm run build
+      - run: npm run test
       - name: Docker meta
         id: meta
         uses: docker/metadata-action@v4

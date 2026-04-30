@@ -20,15 +20,13 @@ export class AlbumSearchItem extends SearchItem {
         'Unable to construct playlist search hint, required properties were undefined',
       );
     }
-    let artist = '';
-    if (hint.AlbumArtist) {
-      artist = `${hint.AlbumArtist} - `;
-    }
 
     return new AlbumSearchItem(
       hint.Id,
-      trimStringToFixedLength(artist + hint.Name, 70),
+      trimStringToFixedLength(hint.Name, 70),
       hint.RunTimeTicks / 10000,
+      {},
+      hint.AlbumArtist ?? '',
     );
   }
 
@@ -38,15 +36,13 @@ export class AlbumSearchItem extends SearchItem {
         'Unable to construct search hint from base item, required properties were undefined',
       );
     }
-    let artist = '';
-    if (baseItem.AlbumArtist) {
-      artist = `${baseItem.AlbumArtist} - `;
-    }
 
     return new AlbumSearchItem(
       baseItem.Id,
-      trimStringToFixedLength(artist + baseItem.Name, 70),
+      trimStringToFixedLength(baseItem.Name, 70),
       baseItem.RunTimeTicks / 10000,
+      {},
+      baseItem.AlbumArtist ?? '',
     );
   }
 

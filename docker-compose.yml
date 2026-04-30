@@ -1,0 +1,16 @@
+services:
+  jellyfin-discord-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: jellyfin-discord-bot
+    restart: unless-stopped
+    environment:
+      - DISCORD_CLIENT_TOKEN=${DISCORD_CLIENT_TOKEN}
+      - JELLYFIN_SERVER_ADDRESS=${JELLYFIN_SERVER_ADDRESS}
+      - JELLYFIN_AUTHENTICATION_USERNAME=${JELLYFIN_AUTHENTICATION_USERNAME}
+      - JELLYFIN_AUTHENTICATION_PASSWORD=${JELLYFIN_AUTHENTICATION_PASSWORD}
+      - UPDATER_DISABLE_NOTIFICATIONS=${UPDATER_DISABLE_NOTIFICATIONS:-false}
+      - ALLOW_EVERYONE_FOR_DEFAULT_PERMS=${ALLOW_EVERYONE_FOR_DEFAULT_PERMS:-false}
+      - LOG_LEVEL=${LOG_LEVEL:-LOG}
+      - PORT=3000

@@ -24,6 +24,10 @@ import { EventNames } from '../../events/names';
 @Injectable()
 export class JellyfinWebSocketService implements OnModuleDestroy {
   private webSocket: WebSocket;
+  private reconnectTimer?: NodeJS.Timeout;
+  private isManuallyClosed = false;
+  private isConnecting = false;
+  private reconnectAttempts = 0;
 
   private readonly logger = new Logger(JellyfinWebSocketService.name);
 
@@ -48,6 +52,18 @@ export class JellyfinWebSocketService implements OnModuleDestroy {
   }
 
   initializeAndConnect() {
+    if (this.isConnecting) {
+      this.logger.debug('WebSocket is already connecting, skipping.');
+      return;
+    }
+    if (this.webSocket && this.webSocket.readyState === WebSocket.OPEN) {
+      this.logger.debug('WebSocket already open, skipping connect.');
+      return;
+    }
+
+    this.isManuallyClosed = false;
+    this.isConnecting = true;
+
     const deviceId = this.jellyfinService.getJellyfin().deviceInfo.id;
     const url = JellyfinWebSocketService.buildSocketUrl(
       this.jellyfinService.getApi().basePath,
@@ -62,6 +78,13 @@ export class JellyfinWebSocketService implements OnModuleDestroy {
   }
 
   disconnect() {
+    this.isManuallyClosed = true;
+    this.isConnecting = false;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = undefined;
+    }
+
     if (!this.webSocket) {
       this.logger.warn(
         'Tried to disconnect but WebSocket was unexpectedly undefined',
@@ -70,7 +93,11 @@ export class JellyfinWebSocketService implements OnModuleDestroy {
     }
 
     this.logger.debug('Closing WebSocket...');
-    this.webSocket.close();
+    try {
+      this.webSocket.close();
+    } catch (e) {
+      this.logger.warn(`Error while closing WebSocket: ${e}`);
+    }
   }
 
   sendMessage(type: string, data?: any) {
@@ -85,7 +112,13 @@ export class JellyfinWebSocketService implements OnModuleDestroy {
   }
 
   protected async messageHandler(data: any) {
-    const msg: JellyMessage<unknown> = JSON.parse(data);
+    let msg: JellyMessage<unknown>;
+    try {
+      msg = JSON.parse(data);
+    } catch (e) {
+      this.logger.warn(`Failed to parse WebSocket message: ${e}`);
+      return;
+    }
 
     switch (msg.MessageType) {
       case SessionMessageType[SessionMessageType.KeepAlive]:
@@ -141,6 +174,9 @@ export class JellyfinWebSocketService implements OnModuleDestroy {
       case PlaystateCommand.Pause:
         this.eventEmitter.emit(EventNames.Controls.Pause);
         break;
+      case PlaystateCommand.Unpause:
+        this.eventEmitter.emit('internal.voice.controls.unpause');
+        break;
       case PlaystateCommand.Stop:
         this.eventEmitter.emit(EventNames.Controls.Stop);
         break;
@@ -149,6 +185,21 @@ export class JellyfinWebSocketService implements OnModuleDestroy {
         break;
       case PlaystateCommand.PreviousTrack:
         this.eventEmitter.emit(EventNames.Circuit.PreviousTrack);
+        break;
+      case PlaystateCommand.Seek:
+        this.logger.warn(
+          'Seek command received from Jellyfin but is not yet supported',
+        );
+        break;
+      case PlaystateCommand.Rewind:
+        this.logger.warn(
+          'Rewind command received from Jellyfin but is not yet supported',
+        );
+        break;
+      case PlaystateCommand.FastForward:
+        this.logger.warn(
+          'FastForward command received from Jellyfin but is not yet supported',
+        );
         break;
       default:
         this.logger.warn(
@@ -159,7 +210,54 @@ export class JellyfinWebSocketService implements OnModuleDestroy {
   }
 
   private bindWebSocketEvents() {
+    this.webSocket.on('open', () => {
+      this.logger.log('Jellyfin WebSocket connected');
+      this.isConnecting = false;
+      this.reconnectAttempts = 0;
+      if (this.reconnectTimer) {
+        clearTimeout(this.reconnectTimer);
+        this.reconnectTimer = undefined;
+      }
+    });
+
     this.webSocket.on('message', this.messageHandler.bind(this));
+
+    this.webSocket.on('close', (code, reason) => {
+      this.logger.warn(`Jellyfin WebSocket closed (code=${code}, reason=${reason?.toString?.() || ''})`);
+      this.isConnecting = false;
+      if (!this.isManuallyClosed) {
+        this.scheduleReconnect();
+      }
+    });
+
+    this.webSocket.on('error', (err) => {
+      this.logger.error(`Jellyfin WebSocket error: ${err?.message || err}`);
+      // Let the 'close' handler manage reconnection; but if it's stuck, schedule one.
+      if (!this.isManuallyClosed) {
+        this.scheduleReconnect();
+      }
+    });
+  }
+
+  private scheduleReconnect() {
+    if (this.isConnecting) return;
+    if (this.reconnectTimer) return;
+
+    this.reconnectAttempts += 1;
+    const baseDelay = 1000; // 1s
+    const maxDelay = 30000; // 30s
+    const jitter = Math.floor(Math.random() * 250); // up to 250ms jitter
+    const delay = Math.min(maxDelay, baseDelay * Math.pow(2, this.reconnectAttempts)) + jitter;
+
+    this.logger.warn(`Attempting to reconnect Jellyfin WebSocket in ${delay}ms (attempt ${this.reconnectAttempts})`);
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = undefined;
+      if (this.isManuallyClosed) {
+        this.logger.debug('Reconnect aborted: socket manually closed.');
+        return;
+      }
+      this.initializeAndConnect();
+    }, delay);
   }
 
   private static buildSocketUrl(
@@ -170,7 +268,7 @@ export class JellyfinWebSocketService implements OnModuleDestroy {
     const url = new URL(baseName);
     url.pathname += '/socket';
     url.protocol = url.protocol.replace('http', 'ws');
-    url.search = `?api_key=${apiToken}&deviceId=${device}`;
+    url.search = `?ApiKey=${apiToken}&deviceId=${device}`;
     return url;
   }
 

@@ -227,6 +227,14 @@ export class DiscordVoiceService implements OnModuleDestroy {
   }
 
   /**
+   * Unpauses the current audio player (from remote Jellyfin command)
+   */
+  @OnEvent('internal.voice.controls.unpause')
+  unpauseFromRemote() {
+    this.unpause();
+  }
+
+  /**
    * Stops the audio player
    */
   @OnEvent(EventNames.Controls.Stop)
